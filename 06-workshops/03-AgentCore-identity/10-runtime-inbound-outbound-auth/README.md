@@ -1,5 +1,12 @@
 # AgentCore Identity: Runtime Inbound and Outbound Auth (Cognito)
 
+## Project Info
+| Tag          | Value             |
+|:-------------|:------------------|
+| Project      | Workshop-Agentcore|
+| Owner        | Pathipat          |
+| Environment  | Dev               |
+
 ## Overview
 
 This sample shows how to secure an **AgentCore Runtime** agent with both inbound and outbound authentication using Amazon Cognito as the Identity Provider (IdP).
@@ -227,4 +234,4 @@ print("Cognito User Pool deleted.")
 |:--------|:---------------------------|
 | **Inbound JWT validation** | AgentCore Runtime checks `Authorization: Bearer <token>` against the Cognito JWKS endpoint before executing the agent |
 | **Outbound API key** | `@requires_api_key(provider_name="OutboundApiKey")` calls `bedrock-agentcore:GetResourceApiKey` + `secretsmanager:GetSecretValue` at runtime |
-| **Zero-secret agent code** | API keys live in Secrets Manager; agent code only sees them in-memory via the decorator |
+| **Zero-secret agent code** | API keys live in Secrets Manager; agent code only sees them in-memory via the decorator
