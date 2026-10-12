@@ -121,7 +121,7 @@ Three evaluation interfaces are available depending on your use case:
 | :----------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [`ground-truth-based-evaluation/`](ground-truth-based-evaluation/) | EvaluationClient + DatasetRunner + BatchRunner with expected responses, expected tool trajectories, and session assertions                                          |
 | [`llm-as-a-judge-evaluation/`](llm-as-a-judge-evaluation/)         | Custom LLM-as-a-judge evaluators (TRACE + SESSION) with ground-truth placeholders alongside built-in evaluators                                                     |
-| [`custom-code-based-evaluation/`](custom-code-based-evaluation/)   | Lambda-backed deterministic evaluators (code-based) for exact data validation, mixed with built-in LLM evaluators; on-demand and online modes                       |
+| [`custom-code-based-evaluation/`](custom-code-based-evaluation/)   | Lambda-backed deterministic evaluators (code-based) for exact data validation, mixed with built-in LLM evaluators; on-demand and online modes. Also includes Jev and Strands Decider decision-model evaluators (opt-in via `--with-jev` / `--with-decider`) |
 | [`skills-evaluation/`](skills-evaluation/)                         | Native Strands Agent Skills evaluated with `Builtin.SkillSelectionAccuracy` and `Builtin.SkillInstructionFollowing`                                               |
 | [`supported-frameworks/`](supported-frameworks/)                   | The same HR Assistant re-implemented in other supported frameworks (OpenAI Agents SDK, LlamaIndex), each deployed and evaluated with built-in and custom evaluators |
 
@@ -136,7 +136,11 @@ The `ground-truth-based-evaluation/`, `llm-as-a-judge-evaluation/`, and `custom-
 The AgentCore CLI supports evaluation workflows. Install it:
 
 ```bash
-npm install -g @aws/agentcore
+npm install -g @aws/agentcore@0.30.0
+node -e 'process.exit(+process.versions.node.split(".")[0] >= 20 ? 0 : 1)' \
+  || { echo "ERROR: Node.js 20+ required by the AgentCore CLI (found $(node -v))"; exit 1; }
+agentcore --version | grep -q '^0\.' \
+  || { echo "ERROR: these samples need AgentCore CLI v0. Run: npm install -g @aws/agentcore@0.30.0"; exit 1; }
 ```
 
 ### On-demand evaluation — single session
