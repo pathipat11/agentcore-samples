@@ -245,9 +245,17 @@ into the same CDK stack via `InfraConstruct` — deployed together with a single
 ## Prerequisites
 
 1. **AWS account** with CLI configured (`aws sts get-caller-identity` works).
-2. **Bedrock model access** in your region for:
-   - The agent model (default `us.anthropic.claude-sonnet-4-6`).
+2. **Claude Platform on AWS** (the agent model is called through it, not Bedrock):
+   - A workspace in the same region as `AWS_REGION`, and its ID in `ANTHROPIC_AWS_WORKSPACE_ID`.
+   - Outbound web identity federation enabled once per account:
+     `aws iam enable-outbound-web-identity-federation`
+   - Default models: `claude-sonnet-4-6` and `claude-haiku-4-5`.
+   See [Prerequisites](https://docs.aws.amazon.com/claude-platform/latest/userguide/prerequisites.html)
+   and [Model Access](docs/ARCHITECTURE.md#model-access-claude-platform-on-aws).
+
+   **Bedrock model access** is still needed in your region for:
    - If using KB: the embedding model (`amazon.titan-embed-text-v2:0`).
+   - Online Evaluation (LLM-as-judge), unless `onlineEvalConfigs` is `[]`.
    See [Bedrock model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html).
 3. **Node.js 20+** and AgentCore CLI: `npm install -g @aws/agentcore@0.30.0`
 node -e 'process.exit(+process.versions.node.split(".")[0] >= 20 ? 0 : 1)' \
@@ -468,8 +476,11 @@ The CLI passes `agentcore/.env.local` into the dev container. This file is
 
 ```bash
 # agentcore/.env.local
-AGENT_MODEL_ID=us.anthropic.claude-sonnet-4-6
-FAST_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0
+AWS_REGION=us-east-1
+AGENT_MODEL_ID=claude-sonnet-4-6
+FAST_MODEL_ID=claude-haiku-4-5
+ANTHROPIC_AWS_WORKSPACE_ID=wrkspc_xxxxxxxxxxxxxxxx
+CLAUDE_AWS_AUTH_MODE=sigv4
 ```
 
 | File                      | Used by                            | Purpose                             |
@@ -478,10 +489,10 @@ FAST_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0
 | `agentcore/.env.local`    | Dev container (`agentcore dev`)    | Runtime env vars passed to agent    |
 | CDK `addPropertyOverride` | Deployed Runtime                   | Production env vars (set at deploy) |
 
-> **Tip**: If you get "model identifier is invalid" during local dev:
-> 1. Ensure `AWS_REGION=us-west-2` is set in `agentcore/.env.local`
-> 2. Set `AGENT_MODEL_ID` to a full model ID with version (e.g., `us.anthropic.claude-sonnet-4-6`)
-> 3. Verify the model is available in that region with `aws bedrock list-foundation-models --region us-west-2 --query 'modelSummaries[?contains(modelId, \`claude\`)].modelId'`
+> **Tip**: If model calls fail during local dev:
+> 1. Ensure `AWS_REGION` in `agentcore/.env.local` matches the region of your Claude Platform on AWS workspace
+> 2. Ensure `ANTHROPIC_AWS_WORKSPACE_ID` is set and `AGENT_MODEL_ID` is a bare ID such as `claude-sonnet-4-6`
+> 3. A `403` mentioning `sts:GetWebIdentityToken` means the calling identity lacks that permission, or outbound web identity federation is not enabled (`aws iam get-outbound-web-identity-federation-info`)
 
 ## Observability + Evaluation
 
@@ -583,13 +594,13 @@ agentcore logs --since 10m
 ### Change the Agent Model
 
 Edit `app/ITIncidentAgent/model/load.py` or set the `AGENT_MODEL_ID` environment
-variable. The model must be enabled in your Bedrock console.
+variable. Models are called through Claude Platform on AWS and must be available
+in your workspace. Use bare Anthropic model IDs.
 
 ```python
-# model/load.py — supported models include:
-# us.anthropic.claude-sonnet-4-6 (default)
-# us.anthropic.claude-haiku-4-5-20251001-v1:0 (faster, cheaper)
-# us.meta.llama-4-405b-instruct-v1:0
+# model/load.py — model IDs (Claude Platform on AWS):
+# claude-sonnet-4-6 (default, AGENT_MODEL_ID)
+# claude-haiku-4-5 (faster, cheaper, FAST_MODEL_ID for LOW priority)
 ```
 
 ### Modify the System Prompt
@@ -845,7 +856,7 @@ ITIncidentAgent/
 │   ├── mcp_client/jira.py          # Atlassian Remote MCP client (opt-in, 3LO auth)
 │   ├── memory/session.py           # AgentCore Memory session manager
 │   ├── memory/enrichment.py        # Past-incident retrieval + episode recording
-│   └── model/load.py               # Bedrock model loader (cost routing)
+│   └── model/load.py               # Claude Platform on AWS model loader (cost routing)
 ├── lambdas/                        # Lambda function implementations
 │   ├── tools/                      # Gateway tool targets
 │   │   ├── lookup_user.py          # User profile + recent incidents

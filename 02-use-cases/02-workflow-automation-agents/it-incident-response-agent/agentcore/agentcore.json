@@ -19,8 +19,11 @@
         { "name": "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "value": "true" },
         { "name": "OTEL_AWS_APPLICATION_SIGNALS_ENABLED", "value": "true" },
         { "name": "OTEL_PROPAGATORS", "value": "baggage,tracecontext,xray" },
-        { "name": "AGENT_MODEL_ID", "value": "us.anthropic.claude-sonnet-4-6" },
-        { "name": "FAST_MODEL_ID", "value": "us.anthropic.claude-haiku-4-5-20251001-v1:0" }
+        { "name": "AGENT_MODEL_ID", "value": "claude-sonnet-4-6" },
+        { "name": "FAST_MODEL_ID", "value": "claude-haiku-4-5" },
+        { "name": "ANTHROPIC_AWS_WORKSPACE_ID", "value": "wrkspc_01MWdcjKZoBBh9UmXyJAVS4W" },
+        { "name": "CLAUDE_AWS_AUTH_MODE", "value": "sigv4" },
+        { "name": "AWS_REGION", "value": "us-east-1" }
       ]
     }
   ],

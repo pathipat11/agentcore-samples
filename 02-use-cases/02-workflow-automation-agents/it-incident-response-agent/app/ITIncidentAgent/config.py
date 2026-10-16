@@ -40,5 +40,10 @@ JIRA_SITE_URL = os.getenv("JIRA_SITE_URL", "")
 JIRA_PROJECT_KEY = os.getenv("JIRA_PROJECT_KEY", "INC")
 
 # ─── Model ───────────────────────────────────────────────────────────────────
-AGENT_MODEL_ID = os.getenv("AGENT_MODEL_ID", "us.anthropic.claude-sonnet-4-6")
-FAST_MODEL_ID = os.getenv("FAST_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
+# Claude is called through Claude Platform on AWS (Anthropic-operated endpoint,
+# SigV4-signed with the default AWS credential chain), not Amazon Bedrock.
+# Model IDs are therefore bare Anthropic IDs, not Bedrock inference profiles.
+AGENT_MODEL_ID = os.getenv("AGENT_MODEL_ID", "claude-sonnet-4-6")
+FAST_MODEL_ID = os.getenv("FAST_MODEL_ID", "claude-haiku-4-5")
+ANTHROPIC_AWS_WORKSPACE_ID = os.getenv("ANTHROPIC_AWS_WORKSPACE_ID", "")
+CLAUDE_AWS_AUTH_MODE = os.getenv("CLAUDE_AWS_AUTH_MODE", "sigv4")

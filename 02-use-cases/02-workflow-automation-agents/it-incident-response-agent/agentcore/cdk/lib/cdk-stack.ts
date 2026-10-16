@@ -274,6 +274,7 @@ export class AgentCoreStack extends Stack {
     // memory permissions by default. Our agent code also needs:
     //   - dynamodb:UpdateItem on Tickets table (write resolution / mark failed)
     //   - bedrock:ApplyGuardrail (PII filtering)
+    //   - aws-external-anthropic:* (Claude Platform on AWS model calls)
     //   - events:PutEvents (EventBridge emission)
     //   - bedrock-agentcore:GetResourceOauth2Token (Jira 3LO token fetch)
     //   - logs:StartQuery, logs:GetQueryResults, logs:StopQuery, etc. (CloudWatch Logs Insights)
@@ -292,6 +293,7 @@ export class AgentCoreStack extends Stack {
       const cfnRole = runtimeRole as cdk.CfnResource;
       // Use the logical ID to get the role for policy attachment
       const roleName = cfnRole.ref;
+      const claudeWorkspaceId = process.env.ANTHROPIC_AWS_WORKSPACE_ID || '';
 
       const statements = [
         new iam.PolicyStatement({
@@ -308,6 +310,43 @@ export class AgentCoreStack extends Stack {
           sid: 'EventBridgeAccess',
           actions: ['events:PutEvents'],
           resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/${this.infra.eventBusName}`],
+        }),
+        // ─── Claude Platform on AWS (model calls) ──
+        // The agent calls Claude via Claude Platform on AWS (SigV4, service name
+        // `aws-external-anthropic`), not Bedrock. Per the IAM policies docs:
+        //   - CreateInference / CountTokens are workspace-scoped and are what a
+        //     SigV4 caller needs for /v1/messages and token counting.
+        //   - CallWithBearerToken is route-less (does not bind to a workspace ARN),
+        //     so it must use Resource '*'. The docs say SigV4-only callers do not
+        //     need it; it is granted here to cover the API-key/bearer path as well.
+        // Workspace ARN: arn:aws:aws-external-anthropic:<region>:<account>:workspace/<id>.
+        // ANTHROPIC_AWS_WORKSPACE_ID comes from .env (loaded by scripts/deploy.sh).
+        // If it is unset at synth time, fall back to '*' rather than failing synth.
+        // Bedrock grants (online evaluation) are intentionally left untouched.
+        new iam.PolicyStatement({
+          sid: 'ClaudePlatformAwsInference',
+          actions: ['aws-external-anthropic:CreateInference', 'aws-external-anthropic:CountTokens'],
+          resources: [
+            claudeWorkspaceId
+              ? `arn:aws:aws-external-anthropic:${this.region}:${this.account}:workspace/${claudeWorkspaceId}`
+              : '*',
+          ],
+        }),
+        // Claude Platform on AWS authorizes SigV4 callers through outbound web
+        // identity federation: the gateway mints a JWT on the caller's behalf, so
+        // the calling role itself needs sts:GetWebIdentityToken (and the Tag
+        // variant). Without it the API returns 403 "not authorized to perform
+        // sts:GetWebIdentityToken on arn:aws:sts::<account>:self". The account must
+        // also have run `aws iam enable-outbound-web-identity-federation` once.
+        new iam.PolicyStatement({
+          sid: 'ClaudePlatformAwsWebIdentity',
+          actions: ['sts:GetWebIdentityToken', 'sts:TagGetWebIdentityToken'],
+          resources: ['*'],
+        }),
+        new iam.PolicyStatement({
+          sid: 'ClaudePlatformAwsBearerToken',
+          actions: ['aws-external-anthropic:CallWithBearerToken'],
+          resources: ['*'],
         }),
         // ─── OBSERVABILITY: CloudWatch Logs Insights ──
         // NOTE: X-Ray put-trace permissions (xray:PutTraceSegments / PutTelemetryRecords)
@@ -488,7 +527,7 @@ export class AgentCoreStack extends Stack {
     if (!clientSecret) {
       throw new Error(
         'JIRA_OAUTH_CLIENT_SECRET is required when JIRA_OAUTH_CLIENT_ID is set. ' +
-          'Set it in .env or as an environment variable.'
+        'Set it in .env or as an environment variable.'
       );
     }
     const jiraSecret = new cdk.aws_secretsmanager.Secret(this, 'JiraOauthSecret', {

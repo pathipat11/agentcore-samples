@@ -1,5 +1,7 @@
 # Architecture Guide: IT Incident Response Agent
 
+> Other languages: [ภาษาไทย](ARCHITECTURE.th.md)
+
 This document is the **guided tour** of the accelerator. Read it first.
 
 ---
@@ -249,7 +251,7 @@ blob:
 | `app/ITIncidentAgent/mcp_client/jira.py` | Connects to Atlassian Remote MCP (opt-in, 3LO auth) | ENRICH + ACT |
 | `app/ITIncidentAgent/memory/session.py` | AgentCore Memory session manager (persists turns) | Post-ACT |
 | `app/ITIncidentAgent/memory/enrichment.py` | Memory retrieval of past incidents (cross-session) | Pre-REASON |
-| `app/ITIncidentAgent/model/load.py` | Loads Bedrock model from env var + cost routing | REASON |
+| `app/ITIncidentAgent/model/load.py` | Builds the Claude Platform on AWS model (SigV4, workspace) + cost routing | REASON |
 | `app/ITIncidentAgent/Dockerfile` | Container image definition | — |
 
 ### Tool Lambdas (what the Gateway invokes)
@@ -851,6 +853,56 @@ sequenceDiagram
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
 </details>
+
+---
+
+## Model Access: Claude Platform on AWS
+
+This deployment calls Claude through **Claude Platform on AWS** (the
+Anthropic-operated Messages API, authenticated with AWS SigV4) instead of
+Amazon Bedrock. Only the agent's LLM calls take this path. The Gateway, Memory,
+Guardrail, DynamoDB and EventBridge integrations are unchanged.
+
+| Concern | Where it lives |
+|---------|----------------|
+| Client | `model/load.py` — `ClaudePlatformAWSModel`, a Strands `AnthropicModel` whose client is replaced with `anthropic.AsyncAnthropicAWS` (Strands hardcodes the plain `AsyncAnthropic`, which cannot do SigV4) |
+| Config | `config.py` — `ANTHROPIC_AWS_WORKSPACE_ID`, `CLAUDE_AWS_AUTH_MODE` (only `sigv4` is implemented), `AGENT_MODEL_ID`, `FAST_MODEL_ID` |
+| Model IDs | Bare Anthropic IDs: `claude-sonnet-4-6`, `claude-haiku-4-5` (not the Bedrock `us.anthropic.*` form) |
+| Dependencies | `anthropic[aws]` and `strands-agents[anthropic]` in `app/ITIncidentAgent/pyproject.toml` |
+| Runtime env vars | `agentcore/agentcore.json` → `runtimes[].envVars` |
+| IAM | `agentcore/cdk/lib/cdk-stack.ts` → `RuntimeAdditionalPolicy` |
+
+**How a request is authorized**
+
+1. The Runtime signs the request with SigV4 using its execution role (no API
+   key is stored) and sends it to `https://aws-external-anthropic.<region>.api.aws`
+   with the workspace ID in the `anthropic-workspace-id` header.
+2. The service mints a web identity token on the caller's behalf, so the role
+   needs `sts:GetWebIdentityToken` (and `sts:TagGetWebIdentityToken`), and the
+   account must have outbound web identity federation enabled.
+3. The role also needs `aws-external-anthropic:CreateInference` and
+   `aws-external-anthropic:CountTokens` on the workspace ARN.
+   `CallWithBearerToken` is only needed for API-key auth and is granted as a
+   precaution.
+
+**One-time setup per account**
+
+```bash
+aws iam enable-outbound-web-identity-federation
+aws iam get-outbound-web-identity-federation-info   # expect "JwtVendingEnabled": true
+```
+
+**Constraints**
+
+- Workspaces are bound to one region. `AWS_REGION` must match the workspace
+  region.
+- Setting `ANTHROPIC_AWS_API_KEY` makes the SDK switch to API-key auth. The
+  loader raises an error in that case, because this project promises SigV4.
+- **Online Evaluation still uses Bedrock.** The four LLM-as-judge evaluators run
+  on Bedrock, independent of the agent's model. Enable Bedrock model access in
+  the region, or set `onlineEvalConfigs` to `[]` in `agentcore.json`.
+- A missing `sts:GetWebIdentityToken` grant shows up as a `403` in the ticket's
+  `error_message` (`status=Failed`).
 
 ---
 

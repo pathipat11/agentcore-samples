@@ -7,8 +7,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 TICKET_FILE="${1:-$PROJECT_DIR/seed-data/sample_ticket.json}"
-# Stack is deployed to us-west-2; override AWS_REGION if it points elsewhere
-REGION="${DEPLOY_REGION:-us-west-2}"
+# Region resolution: DEPLOY_REGION, then AWS_REGION from .env, then us-east-1
+# (the region this stack is deployed to with Claude Platform on AWS).
+if [ -f "$PROJECT_DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$PROJECT_DIR/.env"
+  set +a
+fi
+REGION="${DEPLOY_REGION:-${AWS_REGION:-us-east-1}}"
 
 # Get the SNS topic ARN from CloudFormation outputs
 # The stack name follows the AgentCore CLI convention: AgentCore-<ProjectName>-<target>
